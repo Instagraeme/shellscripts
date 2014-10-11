@@ -1,0 +1,24 @@
+#!/bin/zsh
+
+MUSICFOLDER='/Volumes/Storage/Users/Graeme/Music'
+FLACFOLDER='/Volumes/Storage/Users/Graeme/FLAC Master'
+
+setopt null_glob
+
+cd $MUSICFOLDER
+
+for f in **/*.m4a; do
+   # Create FLAC Directory 
+   if [[ ! -e $FLACFOLDER/${f:r}.flac ]]; then
+
+      mkdir -p "$FLACFOLDER/${f:h}"
+
+      ffmpeg -i $MUSICFOLDER/${f} -vn -c:a flac -map_metadata 0:g $FLACFOLDER/${f:r}.flac
+      AtomicParsley $MUSICFOLDER/${f} --extractPix
+
+      for i in $MUSICFOLDER/${f:r}*.(png|jpg); do
+         metaflac --import-picture-from=$i $FLACFOLDER/${f:r}.flac
+         rm $i
+      done
+fi
+done

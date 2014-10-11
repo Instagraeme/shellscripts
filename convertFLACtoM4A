@@ -1,0 +1,24 @@
+#!/bin/zsh
+
+MUSICFOLDER='/Volumes/Storage/Users/Graeme/Music'
+FLACFOLDER='/Volumes/Storage/Users/Graeme/FLAC Master'
+
+if [[ -e /tmp/folder.jpg ]]; then
+   rm /tmp/folder.jpg
+fi
+
+cd $MUSICFOLDER
+
+for f in **/*.flac; do
+   # Create FLAC Directory 
+   mkdir -p "$FLACFOLDER/${f:h}"
+
+   mv ${f} $FLACFOLDER/${f:h}
+
+   ffmpeg -i $FLACFOLDER/${f} -y -an -vcodec copy /tmp/folder.jpg
+   ffmpeg -i $FLACFOLDER/${f} -vn -c:a alac  -map_metadata 0:g $MUSICFOLDER/${f:r}.m4a
+   if [[ -e /tmp/folder.jpg ]]; then
+      AtomicParsley $MUSICFOLDER/${f:r}.m4a --artwork /tmp/folder.jpg --overWrite
+      rm /tmp/folder.jpg
+   fi
+done

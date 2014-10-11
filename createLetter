@@ -1,0 +1,37 @@
+#!/bin/zsh
+
+setopt null_glob
+
+ARGV="$@"
+
+DIRECTORY="$HOME/Documents/Letters"
+SOURCE="$HOME/Documents/LaTeX/Templates/Letter/Letter.tex"
+TEMPLATE="$HOME/Documents/LaTeX/Templates/Letter/Template.lco"
+DATE=`date "+%Y-%m-%d"`
+
+# Check that we have two arguments
+if [ $# -ne 2 ]; then
+  echo "Usage: ${0:t} directory filename"
+  exit 1
+fi
+
+# If directory doesn't exist then create it
+if [ ! -d "$DIRECTORY/$1" ]; then
+  mkdir -p "$DIRECTORY/$1"
+fi
+
+# Copy global template to directory if it doesn't exist
+if [ ! -e "$DIRECTORY/$1/${TEMPLATE:t}" ]; then
+  cp "$TEMPLATE" "$DIRECTORY/$1/"
+fi
+
+FILENAME="$DATE $2.tex"
+
+# Copy source template to directory if it doesn't exist
+if [ ! -e "$DIRECTORY/$1/$FILENAME" ]; then
+  cp $SOURCE "$DIRECTORY/$1/$FILENAME"
+fi
+
+
+# Open Letter in Vim
+vim "$DIRECTORY/$1/$FILENAME"

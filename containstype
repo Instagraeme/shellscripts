@@ -1,0 +1,17 @@
+#!/bin/zsh
+
+# Usage: containsType directory filetype
+
+if [ "$#" -ne 2 ] || ! [ -d "$1" ] ; then
+  echo "Usage: ${0:t} DIRECTORY FILETYPE"
+  exit 1
+fi
+
+DIRECTORY=$1
+FILETYPE=$2
+
+for FILE in $DIRECTORY/**/*.$FILETYPE ; do
+  DIRECTORIES+="${FILE:h}\n"
+done
+
+echo $DIRECTORIES | uniq | sort
