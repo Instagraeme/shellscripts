@@ -1,0 +1,186 @@
+#!/bin/zsh
+
+FILETYPES=("NEF" "psd" "jpg" "jpeg" "png" "tif" "tiff" "gif")
+
+##########
+#
+# printUsage() - Prints usage help
+#
+##########
+
+printUsage()
+{
+  cat << EOF
+Usage: ${0:t} [options] SOURCE_DIRECTORY OUTPUT_DIRECTORY
+  Options:
+    -d    debug mode
+    -h    print this help message and quit
+    -l    specify file where debug data will be written
+EOF
+}
+
+##########
+# Set Global Variables
+##########
+
+DEBUG=0
+setopt null_glob
+unsetopt CASE_GLOB
+
+##########
+# Parse command line options
+##########
+
+while getopts "dhl:" OPTION
+do
+  case $OPTION in
+    d)
+      DEBUG=1
+      ;;
+    h)
+      printUsage
+      exit 0
+      ;;
+    l)
+      LOGFILE=$OPTARG
+  esac
+done
+# Shift to the remaining arguments
+shift $(($OPTIND - 1))
+
+##########
+# Check if we have enough parameters.  If not printUsage().
+##########
+
+if [ "$#" -lt 2 ] || ! [ -d "$1" ] ; then
+  printUsage
+  exit 1
+fi
+
+##########
+# If LOGFILE is not set then use logfile in users home directory
+##########
+
+if [[ "$LOGFILE" == "" ]] ; then
+  LOGFILE=$HOME/${0:t}.log
+fi
+
+##########
+# Check if we can write to logfile
+##########
+if [ -f $LOGFILE ] ; then
+  if [ ! -w "$LOGFILE" ] ; then
+    echo "Unable to write to $LOGFILE.  Aborting..."
+    exit 1
+  fi
+else
+  if ! touch $LOGFILE ; then
+    echo "Unable to create $LOGFILE. Aborting..."
+    exit 1
+  fi
+fi
+
+##########
+#
+# debug() - if in debug mode then output to screen and logfile, otherwise just
+#           output to logfile
+##########
+
+function debug {
+  if [[ $DEBUG == "1" ]] ; then
+    echo "$*"
+  fi
+  echo $* >> $LOGFILE
+}
+
+
+debug "Arguments are: $1 $2"
+SOURCE=$1
+OUTPUT=$2
+
+echo "Searching for images..."
+for FILETYPE in $FILETYPES ; do
+  COUNT=0
+  COUNT=`print -l -- $SOURCE/**/*.$FILETYPE | wc -l`
+
+  if [ $COUNT -eq 1 ] ; then
+    COUNT=0
+  fi
+
+  debug "$COUNT $FILETYPE found."
+  COUNTER=$[COUNTER + COUNT]
+done
+echo "Found $COUNTER files..."
+
+if ! [ -d "$2" ] ; then
+  mkdir -p $2
+fi
+COUNT=0
+
+for FILETYPE in $FILETYPES ; do
+  debug "Checking $FILETYPE"
+
+  if [[ $FILETYPE == "jpeg" ]] ; then
+    EXTENSION="jpg"
+  else
+    EXTENSION=$FILETYPE
+  fi
+
+  for FILE in $SOURCE/**/*.$FILETYPE ; do
+    COUNT=$[COUNT + 1]
+    echo "Processing: [$COUNT / $COUNTER] $FILE..."
+
+    debug "Checking EXIF data..."
+    DATETIME=`exiftool $FILE | grep "Date/Time Original" | awk '{ print $4" "$5 }' | sort -rn | head -n 1`
+
+    if [[ "$DATETIME" == "" ]] || [[ `echo $DATETIME | awk '{ print $1 }'` == "0000:00:00" ]] ;  then
+      DATETIME=`stat -t '%Y:%m:%d %T' $FILE | awk '{print $11" "$12}' | sed s/\"//g`
+      debug "Using File Datestamp: $DATETIME"
+    else
+      debug "Using EXIF Datestamp: $DATETIME"
+    fi
+
+    grep -sq "\." <<< $DATETIME
+
+    if [ $? -eq 0 ] ; then
+      MILLISECOND=`echo $DATETIME | cut -d'.' -f2`
+      MILLISECOND=".$MILLISECOND"
+      DATETIME=`echo $DATETIME | cut -d'.' -f1`
+    else
+      MILLISECOND=""
+    fi
+
+    DATE=`echo $DATETIME | awk '{ print $1 }' | tr ":" "-"`
+    YEAR=`echo $DATE | tr "-" " " | awk '{ print $1 }'`
+
+    FILENAME=`date -jf "%Y:%m:%d %T" "$DATETIME" "+%s"`
+    FILENAME="$FILENAME$MILLISECOND"
+    debug "Renaming to $OUTPUT/$YEAR/$DATE/$FILENAME.$EXTENSION..."
+
+    if ! [ -d $OUTPUT/$YEAR/$DATE ] ; then
+      mkdir -p $OUTPUT/$YEAR/$DATE
+    fi
+
+    if [ -f $OUTPUT/$YEAR/$DATE/$FILENAME.$EXTENSION ] ; then
+      debug "File Exists. Checking for duplicate..."
+      ORIGINALSUM=`md5 -q $FILE`
+      NEWSUM=`md5 -q $OUTPUT/$YEAR/$DATE/$FILENAME.$EXTENSION`
+
+      debug "Original MD5: $ORIGINALSUM"
+      debug "New MDS: $NEWSUM"
+
+      if [ "$ORIGINALSUM" != "$NEWSUM" ] ; then
+        INC=2
+        while [ -f $OUTPUT/$YEAR/$DATE/$FILENAME-$INC.$EXTENSION ] ; do
+          INC=$[INC + 1]
+        done
+        cp $FILE $OUTPUT/$YEAR/$DATE/$FILENAME-$INC.$EXTENSION
+      else
+        debug "File is a duplicate"
+      fi
+   else
+      cp $FILE $OUTPUT/$YEAR/$DATE/$FILENAME.$EXTENSION
+    fi
+    debug ""
+  done
+done
